@@ -35,6 +35,7 @@ def setup_logger(folder_path):
 
 def driver_config(args):
     options = webdriver.ChromeOptions()
+    # options.add_argument("user-data-dir=D:\WebVoyager\selenium")
 
     if args.save_accessibility_tree:
         args.force_device_scale = True
@@ -42,7 +43,7 @@ def driver_config(args):
     if args.force_device_scale:
         options.add_argument("--force-device-scale-factor=1")
     if args.headless:
-        options.add_argument("--headless")
+        # options.add_argument("--headless")
         options.add_argument(
             "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         )
@@ -55,7 +56,7 @@ def driver_config(args):
     return options
 
 
-def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text):
+def format_msg(it, init_msg, pdf_obs, other_file_obs, warn_obs, web_img_b64, web_text):
     if it == 1:
         init_msg += f"I've provided the tag name of each element and the text it contains (if text exists). Note that <textarea> or <input> may be textbox, but not exactly. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"
         init_msg_format = {
@@ -68,18 +69,7 @@ def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text):
                                            "image_url": {"url": f"data:image/png;base64,{web_img_b64}"}})
         return init_msg_format
     else:
-        if not pdf_obs:
-            curr_msg = {
-                'role': 'user',
-                'content': [
-                    {'type': 'text', 'text': f"Observation:{warn_obs} please analyze the attached screenshot and give the Thought and Action. I've provided the tag name of each element and the text it contains (if text exists). Note that <textarea> or <input> may be textbox, but not exactly. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"},
-                    {
-                        'type': 'image_url',
-                        'image_url': {"url": f"data:image/png;base64,{web_img_b64}"}
-                    }
-                ]
-            }
-        else:
+        if pdf_obs:
             curr_msg = {
                 'role': 'user',
                 'content': [
@@ -90,10 +80,35 @@ def format_msg(it, init_msg, pdf_obs, warn_obs, web_img_b64, web_text):
                     }
                 ]
             }
+
+        elif other_file_obs:
+            curr_msg = {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': f"Observation: {other_file_obs} Please analyze the response given by Assistant, then consider whether to continue iterating or not. The screenshot of the current page is also attached, give the Thought and Action. I've provided the tag name of each element and the text it contains (if text exists). Note that <textarea> or <input> may be textbox, but not exactly. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"},
+                    {
+                        'type': 'image_url',
+                        'image_url': {"url": f"data:image/png;base64,{web_img_b64}"}
+                    }
+                ]
+            }
+        
+        else: # no any file download
+            curr_msg = {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': f"Observation:{warn_obs} please analyze the attached screenshot and give the Thought and Action. I've provided the tag name of each element and the text it contains (if text exists). Note that <textarea> or <input> may be textbox, but not exactly. Please focus more on the screenshot and then refer to the textual information.\n{web_text}"},
+                    {
+                        'type': 'image_url',
+                        'image_url': {"url": f"data:image/png;base64,{web_img_b64}"}
+                    }
+                ]
+            }
+            
         return curr_msg
 
 
-def format_msg_text_only(it, init_msg, pdf_obs, warn_obs, ac_tree):
+def format_msg_text_only(it, init_msg, pdf_obs, other_file_obs, warn_obs, ac_tree):
     if it == 1:
         init_msg_format = {
             'role': 'user',
@@ -101,16 +116,24 @@ def format_msg_text_only(it, init_msg, pdf_obs, warn_obs, ac_tree):
         }
         return init_msg_format
     else:
-        if not pdf_obs:
-            curr_msg = {
-                'role': 'user',
-                'content': f"Observation:{warn_obs} please analyze the accessibility tree and give the Thought and Action.\n{ac_tree}"
-            }
-        else:
+        if pdf_obs:
             curr_msg = {
                 'role': 'user',
                 'content': f"Observation: {pdf_obs} Please analyze the response given by Assistant, then consider whether to continue iterating or not. The accessibility tree of the current page is also given, give the Thought and Action.\n{ac_tree}"
             }
+
+        elif other_file_obs:
+            curr_msg = {
+                'role': 'user',
+                'content': f"Observation: {other_file_obs} Please analyze the response given by Assistant, then consider whether to continue iterating or not. The accessibility tree of the current page is also given, give the Thought and Action.\n{ac_tree}"
+            }
+
+        else:
+            curr_msg = {
+                'role': 'user',
+                'content': f"Observation:{warn_obs} please analyze the accessibility tree and give the Thought and Action.\n{ac_tree}"
+            }
+            
         return curr_msg
 
 
@@ -301,6 +324,7 @@ def main():
 
         fail_obs = ""  # When error execute the action
         pdf_obs = ""  # When download PDF file
+        other_download_obs = ""  # When download other file
         warn_obs = ""  # Type warning
         pattern = r'Thought:|Action:|Observation:'
 
@@ -350,9 +374,9 @@ def main():
 
                 # format msg
                 if not args.text_only:
-                    curr_msg = format_msg(it, init_msg, pdf_obs, warn_obs, b64_img, web_eles_text)
+                    curr_msg = format_msg(it, init_msg, pdf_obs, other_download_obs, warn_obs, b64_img, web_eles_text)
                 else:
-                    curr_msg = format_msg_text_only(it, init_msg, pdf_obs, warn_obs, ac_tree)
+                    curr_msg = format_msg_text_only(it, init_msg, pdf_obs, other_download_obs, warn_obs, ac_tree)
                 messages.append(curr_msg)
             else:
                 curr_msg = {
@@ -405,6 +429,7 @@ def main():
 
             fail_obs = ""
             pdf_obs = ""
+            other_download_obs = ""
             warn_obs = ""
             # execute action
             try:
@@ -434,12 +459,18 @@ def main():
                         time.sleep(10)
                         current_files = sorted(os.listdir(args.download_dir))
 
-                        current_download_file = [pdf_file for pdf_file in current_files if pdf_file not in download_files and pdf_file.endswith('.pdf')]
+                        current_download_file = [pdf_file for pdf_file in current_files if pdf_file not in download_files]
+                        current_download_pdf_file = [file for file in current_files if file.endswith('.pdf')]
                         if current_download_file:
-                            pdf_file = current_download_file[0]
-                            pdf_obs = get_pdf_retrieval_ans_from_assistant(client, os.path.join(args.download_dir, pdf_file), task['ques'])
-                            shutil.copy(os.path.join(args.download_dir, pdf_file), task_dir)
-                            pdf_obs = "You downloaded a PDF file, I ask the Assistant API to answer the task based on the PDF file and get the following response: " + pdf_obs
+                            if current_download_pdf_file:
+                                pdf_file = current_download_pdf_file[0]
+                                pdf_obs = get_pdf_retrieval_ans_from_assistant(client, os.path.join(args.download_dir, pdf_file), task['ques'])
+                                shutil.copy(os.path.join(args.download_dir, pdf_file), task_dir)
+                                pdf_obs = "You downloaded a PDF file, I ask the Assistant API to answer the task based on the PDF file and get the following response: " + pdf_obs
+                            else:
+                                other_file = current_download_file[0]
+                                shutil.copy(os.path.join(args.download_dir, other_file), task_dir)
+                                other_download_obs = f"You downloaded a file: {other_file}"
                         download_files = current_files
 
                     if ele_tag_name == 'button' and ele_type == 'submit':
